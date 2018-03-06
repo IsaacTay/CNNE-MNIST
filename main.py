@@ -58,7 +58,7 @@ def train(params, key_order):
         data = torch.cat(torch.unbind(data.squeeze(), 1),1)
         data, target = Variable(data), Variable(target)
         output = model(data)
-        loss = -F.nll_loss(output, target).data[0]
+        loss = F.cross_entropy(output, target).data[0]I
         return loss
 
 if __name__ == "__main__":
@@ -70,23 +70,24 @@ if __name__ == "__main__":
             length += np.prod(state_dict[k].shape)
         opt = dlib.global_function_search([-10] * length,[10] * length, [False] * length)
         
-        ps = []
         print("Start")
-        for i in range(10):
-            print("Optimize Step")
-            evaluations = [opt.get_next_x() for _ in range(8)]
-            params = [(e.x(),key_order) for e in evaluations]
-            print("Eval Start")
-            results = pool.starmap_async(train, params)
-            print("Evaling")
-            results = results.get()
-            print("Eval Stop")
-            for i2 in range(len(results)):
-                evaluations[i2].set(-results[i2])
-            print("Set done")
-            x,y = opt.get_best_function_eval()
-            
-            print(-1*y)
+        prev_count = -1
+        count = 0
+        evaluations = [opt.get_next_x() for _ in range(8)]
+        results = [pool.apply_async(train, (evaluations[i].x(),key_order)) for i in range(len(evaluations))]
+        while True:
+            for i in range(8):
+                if results[i].ready():
+                    evaluations[i].set(-1*results[i].get())
+                    evaluations[i] = opt.get_next_x()
+                    results[i] = pool.apply_async(train, (evaluations[i].x(), key_order))
+                    count += 1
+
+            if prev_count != count:
+                print(count)
+                x,y = opt.get_best_function_eval()
+                print(-1*y)
+                prev_count = count
 
         x,y = opt.get_best_function_eval()
 
