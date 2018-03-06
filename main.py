@@ -13,6 +13,10 @@ import dlib
 
 from math import *
 
+import multiprocessing as mp
+
+import threading
+
 train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('./data/', train=True, download=True,
                    transform=transforms.Compose([
@@ -50,22 +54,41 @@ def train(params):
         loss = F.nll_loss(output, target).data[0]
         return loss
 
-def holder_table(x0,x1):
+def holder_table2(x):
+    return holder_table(*x)
+
+def holder_table(x0, x1):
+    for _ in range(1000):
+        l = 0.01
+        for i in range(10000):
+            l = l * abs(sin(x0)*cos(x1)*exp(abs(1-sqrt(x0*x0+x1*x1)/pi)))
     return -abs(sin(x0)*cos(x1)*exp(abs(1-sqrt(x0*x0+x1*x1)/pi)))
 
-opt = dlib.global_function_search([-10, -10],[10, 10], [False, False])
+if __name__ == "__main__":
+    with mp.Pool(processes=8) as pool:
+        opt = dlib.global_function_search([-10, -10],[10, 10], [False, False])
+        
+        cores = 1
+        ps = []
+        for i in range(10):
+            evaluations = [opt.get_next_x() for _ in range(8)]
+            data = [e.x() for e in evaluations]
+            results = pool.map_async(holder_table2, data)
+            results = results.get()
+            for i2 in range(len(results)):
+                evaluations[i2].set(-results[i2])
+                
+            x,y = opt.get_best_function_eval()
+                
+            print(x)
+            print(-1*y)
 
-for i in range(80):
-    next_x = opt.get_next_x()
-    x = next_x.x()
-    next_x.set(-1*holder_table(x[0], x[1]))
+        x,y = opt.get_best_function_eval()
 
-x,y = opt.get_best_function_eval()
-
-print(x)
-print(-1*y)
-
-x,y = dlib.find_min_global(holder_table, [-10,-10], [10,10], 80)
-
-print(x)
-print(y)
+        print(x)
+        print(-1*y)
+        
+        x,y = dlib.find_min_global(holder_table, [-10,-10], [10,10], 80)
+        
+        print(x)
+        print(y)
